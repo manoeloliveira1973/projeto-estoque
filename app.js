@@ -43,16 +43,26 @@ let db;
 
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });
 
+
+
+
+
 app.post('/login', async (req, res) => {
     const { usuario, senha } = req.body;
 
-    // Agora ele verifica o que você escreveu lá no arquivo .env
-    if (usuario === process.env.APP_USUARIO && senha === process.env.APP_SENHA) {
+    // Agora ele verifica você OU o professor usando variáveis seguras
+    if ((usuario === process.env.APP_USUARIO && senha === process.env.APP_SENHA) ||
+        (usuario === process.env.PROF_USUARIO && senha === process.env.PROF_SENHA)) {
+
         res.json({ ok: true });
     } else {
         res.status(401).send('Usuário ou senha inválidos');
     }
-});
+}); // <--- Verifique se esse fechamento está correto!
+
+
+
+
 
 app.get('/fornecedores', async (req, res) => res.json(await db.all('SELECT * FROM fornecedores')));
 app.post('/fornecedores', async (req, res) => {
