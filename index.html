@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Sistema de Estoque Manoel</title>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --p: #673ab7;
+            --s: #2e7d32;
+            --e: #d32f2f;
+            --ed: #0275d8;
+            --b: #ff9800;
+        }
+
+        body {
+            font-family: sans-serif;
+            background: #f4f6f9;
+            padding: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .flex {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input,
+        select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px;
+        }
+
+        button {
+            padding: 10px 15px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            color: white;
+        }
+
+        .btn-excel {
+            background: #1d6f42;
+        }
+
+        .btn-ed {
+            background: var(--ed);
+        }
+
+        .btn-baixa {
+            background: var(--b);
+        }
+
+        .btn-del {
+            background: var(--e);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+        }
+
+        img.thumb {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid #ddd;
+            transition: 0.3s;
+        }
+
+        img.thumb:hover {
+            transform: scale(1.1);
+        }
+
+        #zoom-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            cursor: zoom-out;
+        }
+
+        #zoom-modal img {
+            max-width: 90%;
+            max-height: 90%;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        #tela-login {
+            position: fixed;
+            inset: 0;
+            background: var(--p);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        /* ESTILO DO NOVO GRID DE RESUMO */
+        #relatorio-fornecedores {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .item-resumo {
+            padding: 15px;
+            border-left: 4px solid var(--p);
+            background: #f9f9f9;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="zoom-modal" onclick="this.style.display='none'"><img id="img-zoom"></div>
+
+    <div id="tela-login">
+        <div style="background:white; padding:40px; border-radius:10px; text-align:center; width: 300px;">
+            <h2 style="color: var(--p);">🔐 Login</h2>
+            <input type="text" id="usu" placeholder="Usuário" style="width: 90%;"><br>
+            <input type="password" id="sen" placeholder="Senha" style="width: 90%;"><br><br>
+            <button onclick="login()" style="background:var(--p); width:100%;">Acessar Sistema</button>
+        </div>
+    </div>
+
+    <div id="app" style="display:none; max-width: 1200px; margin: auto;">
+
+        <div class="flex" style="margin-bottom: 20px;">
+            <h1>📦 Gestão Manoel</h1>
+            <div class="flex">
+                <div style="background:var(--p); color:white; padding:15px; border-radius:8px;">
+                    Patrimônio: <strong id="valTotal">R$ 0,00</strong>
+                </div>
+                <button onclick="fazerBackup()" style="background:#444; margin-right: 5px;">💾 Backup</button>
+                <button onclick="sair()" style="background:var(--e);">Sair</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="flex">
+                <h3>👥 Fornecedores</h3>
+                <div class="flex">
+                    <input type="text" id="buscaF" placeholder="🔍 Buscar fornecedor..."
+                        onkeyup="buscar('body-f', this.value)">
+                    <button class="btn-excel" onclick="exportar('tab-f', 'Fornecedores')">Excel</button>
+                </div>
+            </div>
+            <input type="text" id="fn" placeholder="Nome">
+            <input type="text" id="fc" placeholder="CNPJ">
+            <input type="text" id="fe" placeholder="E-mail">
+            <input type="text" id="ft" placeholder="Telefone">
+            <button onclick="salvarForn()" id="btn-f" style="background:var(--s);">Salvar</button>
+            <table id="tab-f">
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>CNPJ</th>
+                        <th>E-mail</th>
+                        <th>Tel</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="body-f"></tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <div class="flex">
+                <h3>📦 Estoque</h3>
+                <div class="flex">
+                    <input type="text" id="buscaP" placeholder="🔍 Buscar produto..."
+                        onkeyup="buscar('body-p', this.value)">
+                    <button class="btn-excel" onclick="exportar('tab-p', 'Produtos')">Excel</button>
+                </div>
+            </div>
+            <input type="text" id="pn" placeholder="Nome do Produto">
+            <input type="text" id="pp" placeholder="Preço Unitário">
+            <input type="number" id="pq" placeholder="Qtd">
+            <select id="pf"></select>
+            <input type="file" id="pi" accept="image/*">
+            <button onclick="salvarProd()" id="btn-p" style="background:var(--s);">Dar Entrada</button>
+            <table id="tab-p">
+                <thead>
+                    <tr>
+                        <th>Foto</th>
+                        <th>Produto</th>
+                        <th>Preço Médio</th>
+                        <th>Qtd</th>
+                        <th>Total</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="body-p"></tbody>
+            </table>
+        </div>
+
+        <div class="card" id="card-resumo" style="display:none;">
+            <h3>📊 Patrimônio por Fornecedor</h3>
+            <div id="relatorio-fornecedores"></div>
+        </div>
+
+
+
+
+
+        <div class="card">
+            <div class="flex" style="margin-bottom: 15px;">
+                <h3>📜 Histórico</h3>
+                <div class="flex" style="gap: 10px;">
+                    <input type="text" id="buscaH" placeholder="🔍 Filtrar histórico..."
+                        onkeyup="filtrarHistorico(this.value)" style="margin: 0; width: 250px;">
+
+                    <button onclick="limparHist(30)" style="background:#666;">Limpar > 30 dias</button>
+                    <button onclick="limparHist('tudo')" class="btn-del">Zerar Histórico</button>
+                </div>
+            </div>
+
+            <table id="tab-h">
+                <thead>
+                    <tr>
+                        <th>Data/Hora</th>
+                        <th>Produto</th>
+                        <th>Tipo</th>
+                        <th>Qtd</th>
+                    </tr>
+                </thead>
+                <tbody id="body-h"></tbody>
+            </table>
+        </div>
+
+        <script>
+            let idF = null, idP = null;
+
+            function abrirZoom(src) {
+                document.getElementById('img-zoom').src = src;
+                document.getElementById('zoom-modal').style.display = 'flex';
+            }
+
+            async function login() {
+                const u = document.getElementById('usu').value;
+                const s = document.getElementById('sen').value;
+                try {
+                    const res = await fetch('/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usuario: u, senha: s }) });
+                    if (res.ok) { document.getElementById('tela-login').style.display = 'none'; document.getElementById('app').style.display = 'block'; carregar(); }
+                    else alert("Login ou senha inválidos!");
+                } catch (e) { alert("Erro de conexão!"); }
+            }
+
+            async function carregar() {
+                try {
+                    const fs = await fetch('/fornecedores').then(r => r.json());
+                    document.getElementById('pf').innerHTML = fs.map(i => `<option value="${i.id}">${i.nome}</option>`).join('');
+                    document.getElementById('body-f').innerHTML = fs.map(i => `<tr><td>${i.nome}</td><td>${i.cnpj}</td><td>${i.contato}</td><td>${i.telefone}</td><td><button class="btn-ed" onclick="prepararF(${i.id},'${i.nome}','${i.cnpj}','${i.contato}','${i.telefone}')">Ed</button> <button class="btn-del" onclick="remover('fornecedores',${i.id})">X</button></td></tr>`).join('');
+
+                    const ps = await fetch('/produtos').then(r => r.json());
+                    let totalVal = 0;
+                    const produtosValidos = ps.filter(p => p.nome && p.preco !== null);
+
+                    // Lógica de Patrimônio por Fornecedor
+                    let resumoForn = {};
+
+                    document.getElementById('body-p').innerHTML = produtosValidos.map(i => {
+                        const preco = parseFloat(i.preco) || 0;
+                        const qtd = parseInt(i.quantidade) || 0;
+                        const sub = preco * qtd;
+                        totalVal += sub;
+
+                        // Somando para o relatório de fornecedor
+                        const nomeF = fs.find(f => f.id === i.fornecedor_id)?.nome || "Sem Fornecedor";
+                        resumoForn[nomeF] = (resumoForn[nomeF] || 0) + sub;
+
+                        const avisoEstoque = qtd < 5 ? `style="color:red; font-weight:bold;"` : "";
+                        const badge = qtd < 5 ? `<br><small style="color:red;">⚠️ Repor!</small>` : "";
+                        const imgTag = i.imagem ? `<img src="${i.imagem}" class="thumb" onclick="abrirZoom('${i.imagem}')">` : `<div style="width:50px; height:50px; background:#eee; font-size:10px; color:#aaa; display:flex; align-items:center; justify-content:center;">S/ Foto</div>`;
+
+                        return `<tr>
+                        <td>${imgTag}</td>
+                        <td><strong>${i.nome}</strong></td>
+                        <td>R$ ${preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        <td ${avisoEstoque}>${qtd} ${badge}</td>
+                        <td>R$ ${sub.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        <td>
+                            <button class="btn-baixa" onclick="baixa(${i.id})">Saída</button>
+                            <button class="btn-ed" onclick="prepararP(${i.id},'${i.nome}',${preco},${qtd},${i.fornecedor_id})">Ed</button>
+                            <button class="btn-del" onclick="remover('produtos',${i.id})">X</button>
+                        </td>
+                    </tr>`;
+                    }).join('');
+
+                    document.getElementById('valTotal').innerText = `R$ ${totalVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+
+                    // Monta o visual do card de resumo em colunas
+                    const listaRelatorio = Object.entries(resumoForn).map(([nome, valor]) => `
+                    <div class="item-resumo">
+                        <small style="color: #666; display: block; margin-bottom: 5px;">${nome}</small>
+                        <strong style="font-size: 1.1em; color: var(--p);">R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                    </div>
+                `).join('');
+
+                    const cardResumo = document.getElementById('card-resumo');
+                    const divRel = document.getElementById('relatorio-fornecedores');
+
+                    if (Object.keys(resumoForn).length > 0) {
+                        divRel.innerHTML = listaRelatorio;
+                        cardResumo.style.display = 'block';
+                    }
+
+                    const hs = await fetch('/historico').then(r => r.json());
+                    document.getElementById('body-h').innerHTML = hs.map(i => `<tr><td>${new Date(i.data_hora).toLocaleString('pt-BR')}</td><td>${i.produto_nome}</td><td><span style="color: ${i.tipo === 'ENTRADA' ? 'green' : 'red'}">${i.tipo}</span></td><td>${i.quantidade}</td></tr>`).join('');
+                } catch (err) { console.error(err); }
+            }
+
+            // Funções de salvamento e manipulação continuam as mesmas...
+            async function salvarForn() {
+                const d = {
+                    nome: document.getElementById('fn').value,
+                    cnpj: document.getElementById('fc').value,
+                    contato: document.getElementById('fe').value,
+                    telefone: document.getElementById('ft').value
+                };
+                if (!d.nome) return alert("Preencha o nome!");
+                const url = idF ? `/fornecedores/${idF}` : '/fornecedores';
+                const res = await fetch(url, { method: idF ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) });
+                if (res.ok) { idF = null; document.getElementById('btn-f').innerText = "Salvar";['fn', 'fc', 'fe', 'ft'].forEach(id => document.getElementById(id).value = ''); carregar(); }
+            }
+
+            async function salvarProd() {
+                const nome = document.getElementById('pn').value, preco = document.getElementById('pp').value, qtd = document.getElementById('pq').value, fornId = document.getElementById('pf').value, foto = document.getElementById('pi').files[0];
+                if (!nome || !preco || !qtd) return alert("Preencha tudo!");
+                if (idP) {
+                    await fetch(`/produtos/${idP}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome, preco, quantidade: qtd, fornecedor_id: fornId }) });
+                } else {
+                    const fd = new FormData(); fd.append('nome', nome); fd.append('preco', preco); fd.append('quantidade', qtd); fd.append('fornecedor_id', fornId); if (foto) fd.append('foto', foto);
+                    await fetch('/produtos', { method: 'POST', body: fd });
+                }
+                idP = null; document.getElementById('btn-p').innerText = "Dar Entrada";['pn', 'pp', 'pq', 'pi'].forEach(id => document.getElementById(id).value = ''); carregar();
+            }
+
+            function prepararF(id, n, c, e, t) { idF = id; fn.value = n; fc.value = c; fe.value = e; ft.value = t; document.getElementById('btn-f').innerText = "Atualizar"; }
+            function prepararP(id, n, p, q, f) { idP = id; document.getElementById('pn').value = n; document.getElementById('pp').value = p; document.getElementById('pq').value = q; document.getElementById('pf').value = f; document.getElementById('btn-p').innerText = "Atualizar"; document.getElementById('pn').focus(); document.getElementById('pn').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+
+            async function baixa(id) {
+                const produtos = await fetch('/produtos').then(r => r.json());
+                const p = produtos.find(item => item.id === id);
+                const q = prompt(`Produto: ${p.nome}\nEstoque atual: ${p.quantidade}\n\nDigite a quantidade de SAÍDA:`);
+                if (!q || isNaN(q) || q <= 0) return;
+                if (parseInt(q) > p.quantidade) return alert(`❌ Erro: Você só tem ${p.quantidade} em estoque.`);
+                if (confirm(`Confirmar saída de ${q} unidades?`)) {
+                    const res = await fetch(`/produtos/${id}/saida`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quantidadeSaida: q }) });
+                    if (res.ok) carregar();
+                }
+            }
+
+            function sair() { if (confirm("Deseja realmente sair?")) { document.getElementById('app').style.display = 'none'; document.getElementById('tela-login').style.display = 'flex'; } }
+            function fazerBackup() { window.location.href = '/backup'; }
+
+            function filtrarHistorico(valor) {
+                const termo = valor.toLowerCase();
+                const linhas = document.querySelectorAll('#body-h tr');
+
+                linhas.forEach(linha => {
+                    // A segunda célula (índice 1) contém o nome do produto no histórico
+                    const nomeProduto = linha.cells[1].textContent.toLowerCase();
+
+                    if (nomeProduto.includes(termo)) {
+                        linha.style.display = "";
+                    } else {
+                        linha.style.display = "none";
+                    }
+                });
+            }
+
+        </script>
+</body>
+
+</html>
