@@ -27,7 +27,9 @@ const upload = multer({ storage });
 // CONFIGURAÇÃO SUPABASE
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: {
+        rejectUnauthorized: false // ADICIONE ESTA LINHA
+    }
 });
 
 // Inicialização do Banco no Supabase
