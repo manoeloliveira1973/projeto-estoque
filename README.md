@@ -1,68 +1,41 @@
-📦 Sistema de Gestão de Estoque - Manoel
-Este é um sistema de controle de estoque full-stack desenvolvido para facilitar o gerenciamento de produtos, fornecedores e movimentações (entradas e saídas), com foco em usabilidade e organização visual.
+📄 Documentação do Projeto: Sistema de Controle de Estoque
+1. Visão Geral
+Este é um sistema de gerenciamento de estoque desenvolvido em Node.js, focado em facilitar o controle de entrada e saída de produtos, gestão de fornecedores e histórico de movimentações. O projeto foi migrado de um banco de dados local (SQLite) para uma infraestrutura 100% em nuvem.
 
-🚀 Funcionalidades Principais
-🔐 Controle de Acesso: Tela de login integrada para segurança dos dados.
+2. Arquitetura e Tecnologias
+O projeto utiliza a "Stack" moderna de desenvolvimento web:
 
-👥 Gestão de Fornecedores: Cadastro completo com trava automática para CNPJ duplicado.
+Backend: Node.js com Framework Express.
 
-📦 Controle de Inventário: * Entrada de produtos com upload de foto.
+Banco de Dados: PostgreSQL hospedado no Supabase (Banco de dados relacional em nuvem).
 
-Cálculo automático de Preço Médio.
+Frontend: HTML5, CSS3 (com foco em UI/UX responsivo) e JavaScript Vanilla.
 
-Sistema de zoom para fotos dos produtos.
+Hospedagem: Render (Plataforma como Serviço - PaaS).
 
-Alerta visual de "Estoque Baixo" (menos de 5 unidades).
+Persistência de Imagens: Sistema de upload via Multer com armazenamento local/nuvem.
 
-💰 Visão Financeira: Cálculo automático do valor total do patrimônio em estoque.
+3. Principais Funcionalidades
+Autenticação Segura: Sistema de login diferenciado para Administrador e Professor, utilizando variáveis de ambiente (dotenv).
 
-📜 Histórico de Movimentação: Registro detalhado de todas as entradas e saídas.
+Gestão de Fornecedores: Cadastro completo com validação de CNPJ único.
 
-📊 Exportação de Dados: Botões para exportar tabelas de produtos e fornecedores diretamente para Excel.
+Controle de Estoque Inteligente: * Cálculo automático de Preço Médio em novas entradas.
 
-🛠️ Tecnologias Utilizadas
-Backend:
-Node.js: Ambiente de execução.
+Abatimento automático de quantidades em saídas.
 
-Express: Framework para criação da API.
+Validação de estoque insuficiente.
 
-SQLite3: Banco de dados leve e relacional.
+Histórico de Movimentações: Registro automático de todas as operações de "Entrada" e "Saída".
 
-Multer: Biblioteca para gerenciamento de upload de imagens.
+Exportação de Dados: Funcionalidade de exportação da tabela de produtos para Excel.
 
-Frontend:
-HTML5 / CSS3: Estrutura e estilização (variáveis CSS para temas).
+4. Diferenciais Técnicos (O que explicar ao Professor)
+Segurança de Dados: O uso de .env garante que senhas de banco de dados e credenciais de acesso nunca fiquem expostas no código-fonte (GitHub).
 
-JavaScript (Vanilla): Lógica de consumo de API (Fetch API) e manipulação do DOM.
+Escalabilidade: Ao utilizar o PostgreSQL no Supabase, o sistema está pronto para suportar múltiplos acessos simultâneos sem perda de integridade.
 
-SheetJS: Biblioteca para geração de arquivos .xlsx.
+Deploy Contínuo: Configuração de Continuous Deployment via GitHub/Render, onde cada atualização no código é refletida automaticamente no site oficial.
 
-⚙️ Como Instalar e Rodar
-Instale as dependências:
-
-Bash
-npm install express sqlite3 sqlite cors multer
-Inicie o servidor:
-
-Bash
-node nome_do_seu_arquivo.js
-Acesse no navegador:
-http://localhost:3000
-
-Nota: O usuário padrão é admin e a senha é 123.
-
-📁 Estrutura de Pastas
-/uploads: Pasta onde ficam salvas as fotos dos produtos.
-
-estoque.db: Arquivo do banco de dados SQLite (gerado automaticamente).
-
-index.html: Interface do usuário e lógica frontend.
-
-server.js: Lógica do servidor e rotas da API.
-
-📝 Próximas Melhorias (Roadmap)
-[ ] Implementar categorias de produtos.
-
-[ ] Adicionar gráfico de movimentação mensal.
-
-[ ] Relatório de lucro baseado no preço de venda.
+Dica para a sua fala na apresentação:
+"Professor, o destaque deste projeto foi a migração para uma arquitetura em nuvem. Saímos do SQLite local para o PostgreSQL no Supabase, o que garante que os dados estejam seguros e acessíveis de qualquer lugar através do link hospedado no Render."
