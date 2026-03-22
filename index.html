@@ -186,7 +186,7 @@
 
         <div class="card">
             <div class="flex">
-                <h3>👥 Fornecedores</h3>
+                <h3>👥 Cadastro de Fornecedor</h3>
                 <div class="flex">
                     <input type="text" placeholder="🔍 Buscar..." onkeyup="buscar('body-f', this.value)">
                     <button class="btn-excel" onclick="exportarExcel('tab-f', 'Fornecedores')">Excel</button>
@@ -208,6 +208,7 @@
                         <th>Nome</th>
                         <th>CNPJ</th>
                         <th>Contato</th>
+                        <th>Telefone</th>
                         <th>Ações</th>
                     </tr>
                 </thead>
@@ -217,7 +218,7 @@
 
         <div class="card">
             <div class="flex">
-                <h3>📦 Produtos</h3>
+                <h3>📦 Cadastro de Produto</h3>
                 <div class="flex">
                     <input type="text" placeholder="🔍 Buscar..." onkeyup="buscar('body-p', this.value)">
                     <button class="btn-excel" onclick="exportarExcel('tab-p', 'Produtos')">Excel</button>
@@ -295,11 +296,16 @@
             // Fornecedores
             const fs = await fetch('/fornecedores').then(r => r.json());
             document.getElementById('pf').innerHTML = '<option value="" disabled selected>Selecione um fornecedor</option>' + fs.map(i => `<option value="${i.id}">${i.nome}</option>`).join('');
-            document.getElementById('body-f').innerHTML = fs.map(i => `<tr><td>${i.nome}</td><td>${i.cnpj}</td><td>${i.contato}</td><td>
-                <button class="btn-ed" onclick="prepararF(${i.id},'${i.nome}','${i.cnpj}','${i.contato}','${i.telefone}')">Ed</button>
-                <button class="btn-del" onclick="remover('fornecedores',${i.id})">X</button>
-            </td></tr>`).join('');
-
+            document.getElementById('body-f').innerHTML = fs.map(i => `<tr>
+    <td>${i.nome}</td>
+    <td>${i.cnpj}</td>
+    <td>${i.contato}</td>
+    <td>${i.telefone || ''}</td>
+    <td>
+        <button class="btn-ed" onclick="prepararF(${i.id},'${i.nome}','${i.cnpj}','${i.contato}','${i.telefone}')">Ed</button>
+        <button class="btn-del" onclick="remover('fornecedores',${i.id})">X</button>
+    </td>
+</tr>`).join('');
             // Produtos e Alerta de Estoque
             const ps = await fetch('/produtos').then(r => r.json());
             let totalVal = 0;
@@ -320,11 +326,12 @@
                     <td class="${isBaixo ? 'estoque-baixo' : ''}">${i.quantidade} ${isBaixo ? '⚠️' : ''}</td>
                     <td>R$ ${sub.toFixed(2)}</td>
                     <td>
-                        <button class="btn-ed" onclick="prepararP(${i.id},'${i.nome}',${i.preco},${i.quantidade},${i.fornecedor_id})">Ed</button>
-                        <button class="btn-del" onclick="remover('produtos',${i.id})">X</button>
-                    </td></tr>`;
+    <button class="btn-ed" onclick="prepararP(${i.id},'${i.nome}',${i.preco},${i.quantidade},${i.fornecedor_id})">Ed</button>
+    <button style="background:#ff9800; padding:6px 10px;" onclick="saidaEstoque(${i.id}, '${i.nome}', ${i.quantidade})">Saída</button>
+    <button class="btn-del" onclick="remover('produtos',${i.id})">X</button>
+</td>
+                    </tr>`;
             }).join('');
-
 
 
             document.getElementById('valTotal').innerText = `R$ ${totalVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
@@ -348,10 +355,18 @@
             // 2. Verificação de CNPJ duplicado (apenas para novos cadastros)
             if (!idF) { // Se não tem idF, é um novo cadastro
                 const fornecedoresExistentes = await fetch('/fornecedores').then(r => r.json());
-                const jaExiste = fornecedoresExistentes.some(f => f.cnpj === cnpj);
+                function limparCNPJ(c) {
+                    return c.replace(/\D/g, '');
+                }
+
+                const cnpjLimpo = limparCNPJ(cnpj);
+
+                const jaExiste = fornecedoresExistentes.some(f => {
+                    return limparCNPJ(f.cnpj) === cnpjLimpo && f.id !== idF;
+                });
 
                 if (jaExiste) {
-                    return alert("❌ Erro: Este CNPJ já está cadastrado para outro fornecedor!");
+                    return alert("❌ CNPJ já cadastrado!\n\nVerifique se este fornecedor já existe no sistema.");
                 }
             }
 
@@ -371,7 +386,7 @@
                 if (idF) {
                     alert("✅ Fornecedor atualizado com sucesso!");
                 } else {
-                    alert("✅ Novo fornecedor cadastrado com sucesso!");
+                    alert("✅ Fornecedor cadastrado com sucesso!");
                 }
 
                 // Limpeza e Recarregamento
@@ -384,20 +399,57 @@
         }
 
         async function salvarProd() {
-            const nome = document.getElementById('pn').value, preco = document.getElementById('pp').value, qtd = document.getElementById('pq').value, fid = document.getElementById('pf').value;
+            const nome = document.getElementById('pn').value.trim();
+            const preco = document.getElementById('pp').value;
+            const qtd = document.getElementById('pq').value;
+            const fid = document.getElementById('pf').value;
+
+            // 🔴 VALIDAÇÃO IMPORTANTE
+            if (!nome || !preco || !qtd || !fid) {
+                return alert("⚠️ Preencha todos os campos, incluindo o fornecedor!");
+            }
+
             let res;
+
             if (idP) {
-                res = await fetch(`/produtos/${idP}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome, preco, quantidade: qtd, fornecedor_id: fid }) });
+                res = await fetch(`/produtos/${idP}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nome,
+                        preco,
+                        quantidade: qtd,
+                        fornecedor_id: fid
+                    })
+                });
             } else {
                 const fd = new FormData();
-                fd.append('nome', nome); fd.append('preco', preco); fd.append('quantidade', qtd); fd.append('fornecedor_id', fid);
-                if (document.getElementById('pi').files[0]) fd.append('foto', document.getElementById('pi').files[0]);
-                res = await fetch('/produtos', { method: 'POST', body: fd });
+                fd.append('nome', nome);
+                fd.append('preco', preco);
+                fd.append('quantidade', qtd);
+                fd.append('fornecedor_id', fid);
+
+                if (document.getElementById('pi').files[0]) {
+                    fd.append('foto', document.getElementById('pi').files[0]);
+                }
+
+                res = await fetch('/produtos', {
+                    method: 'POST',
+                    body: fd
+                });
             }
+
             if (res.ok) {
                 alert(idP ? "✅ Produto atualizado!" : "✅ Produto cadastrado!");
-                idP = null;['pn', 'pp', 'pq', 'pi'].forEach(id => document.getElementById(id).value = '');
+                idP = null;
+
+                ['pn', 'pp', 'pq', 'pi'].forEach(id => document.getElementById(id).value = '');
+                document.getElementById('pf').value = ""; // limpa fornecedor também
+
                 carregar();
+            } else {
+                const erro = await res.json();
+                alert("❌ " + (erro.erro || "Erro ao salvar produto"));
             }
         }
 
@@ -415,6 +467,42 @@
         function fazerBackup() { window.location.href = '/backup'; }
         function sair() { location.reload(); }
         function buscar(id, t) { document.querySelectorAll(`#${id} tr`).forEach(tr => tr.style.display = tr.innerText.toLowerCase().includes(t.toLowerCase()) ? '' : 'none'); }
+
+        async function saidaEstoque(id, nome, estoqueAtual) {
+            const qtd = prompt(`Saída de estoque para "${nome}"\n\nEstoque atual: ${estoqueAtual}\nDigite a quantidade de saída:`);
+
+            if (!qtd) return;
+
+            const quantidadeSaida = parseInt(qtd);
+
+            if (isNaN(quantidadeSaida) || quantidadeSaida <= 0) {
+                return alert("❌ Quantidade inválida!");
+            }
+
+            if (quantidadeSaida > estoqueAtual) {
+                return alert("❌ Estoque insuficiente!");
+            }
+
+            const novaQtd = estoqueAtual - quantidadeSaida;
+
+            const res = await fetch(`/produtos/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nome: nome,
+                    preco: 0, // ajuste se quiser manter o preço
+                    quantidade: novaQtd,
+                    fornecedor_id: null
+                })
+            });
+
+            if (res.ok) {
+                alert("✅ Saída registrada!");
+                carregar();
+            } else {
+                alert("❌ Erro ao registrar saída.");
+            }
+        }
     </script>
 </body>
 

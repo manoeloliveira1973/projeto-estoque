@@ -91,11 +91,16 @@ app.get('/produtos', async (req, res) => res.json(await db.all('SELECT * FROM pr
 app.post('/produtos', upload.single('foto'), async (req, res) => {
     try {
         let { nome, preco, quantidade, fornecedor_id } = req.body;
+
+        nome = nome.trim().toLowerCase(); // 👈 PADRONIZA
         const nP = parseFloat(preco.toString().replace(',', '.'));
         const nQ = parseInt(quantidade);
         const foto = req.file ? `/uploads/${req.file.filename}` : null;
         if (!fornecedor_id) return res.status(400).json({ erro: "Selecione um fornecedor!" });
-        const ex = await db.get('SELECT * FROM produtos WHERE LOWER(nome) = LOWER(?) AND fornecedor_id = ?', [nome.trim(), fornecedor_id]);
+        const ex = await db.get(
+            'SELECT * FROM produtos WHERE nome = ? AND fornecedor_id = ?',
+            [nome, fornecedor_id]
+        );
         if (ex) {
             const novaQ = ex.quantidade + nQ;
             const novoP = ((ex.preco * ex.quantidade) + (nP * nQ)) / novaQ;
