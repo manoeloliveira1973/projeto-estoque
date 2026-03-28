@@ -200,8 +200,19 @@ app.get('/proxy/:path(*)', async (req, res) => {
 });
 
 // Backup info
-app.get('/backup', (req, res) => {
-    res.status(200).json({ message: 'Use painel Supabase para exportar dados.' });
+app.get('/backup', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM produtos ORDER BY id ASC');
+
+        // Altere .csv para .json aqui:
+        res.setHeader('Content-disposition', 'attachment; filename=backup_estoque.json');
+        res.setHeader('Content-type', 'application/json');
+
+        res.send(JSON.stringify(result.rows, null, 2));
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Erro ao gerar backup');
+    }
 });
 
 app.listen(PORT, () => { console.log(`🚀 Servidor Online na porta ${PORT}`); });
