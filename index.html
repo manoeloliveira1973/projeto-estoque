@@ -130,7 +130,6 @@
             cursor: pointer;
         }
 
-        /* Estilo para estoque baixo na tabela */
         .estoque-baixo {
             color: var(--e);
             font-weight: bold;
@@ -231,10 +230,10 @@
                 <div class="input-group">
                     <label>Qtd</label>
                     <input type="number" id="pq" placeholder="0">
-
                 </div>
                 <div class="input-group"><label>Fornecedor</label><select id="pf"></select></div>
-                <div class="input-group"><label>Foto</label><input type="file" id="pi" accept="image/*"></div>
+                <div class="input-group"><label>URL Foto</label><input type="text" id="pi"
+                        placeholder="https://i.imgur.com/exemplo.jpg"></div>
                 <button onclick="salvarProd()" id="btn-p" class="btn-save">Salvar</button>
             </div>
             <table id="tab-p">
@@ -284,7 +283,11 @@
         async function login() {
             const u = document.getElementById('usu').value;
             const s = document.getElementById('sen').value;
-            const res = await fetch('/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usuario: u, senha: s }) });
+            const res = await fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ usuario: u, senha: s })
+            });
             if (res.ok) {
                 document.getElementById('tela-login').style.display = 'none';
                 document.getElementById('app').style.display = 'block';
@@ -295,45 +298,40 @@
         async function carregar() {
             // Fornecedores
             const fs = await fetch('/fornecedores').then(r => r.json());
-            document.getElementById('pf').innerHTML = '<option value="" disabled selected>Selecione um fornecedor</option>' + fs.map(i => `<option value="${i.id}">${i.nome}</option>`).join('');
+            document.getElementById('pf').innerHTML = '<option value="" disabled selected>Selecione um fornecedor</option>' +
+                fs.map(i => `<option value="${i.id}">${i.nome}</option>`).join('');
             document.getElementById('body-f').innerHTML = fs.map(i => `<tr>
-    <td>${i.nome}</td>
-    <td>${i.cnpj}</td>
-    <td>${i.contato}</td>
-    <td>${i.telefone || ''}</td>
-    <td>
-        <button class="btn-ed" onclick="prepararF(${i.id},'${i.nome}','${i.cnpj}','${i.contato}','${i.telefone}')">Ed</button>
-        <button class="btn-del" onclick="remover('fornecedores',${i.id})">X</button>
-    </td>
-</tr>`).join('');
-            // Produtos e Alerta de Estoque
+                <td>${i.nome}</td>
+                <td>${i.cnpj}</td>
+                <td>${i.contato}</td>
+                <td>${i.telefone || ''}</td>
+                <td>
+                    <button class="btn-ed" onclick="prepararF(${i.id},'${i.nome}','${i.cnpj}','${i.contato}','${i.telefone}')">Ed</button>
+                    <button class="btn-del" onclick="remover('fornecedores',${i.id})">X</button>
+                </td>
+            </tr>`).join('');
+
+            // Produtos
             const ps = await fetch('/produtos').then(r => r.json());
             let totalVal = 0;
-            let baixos = [];
-
             document.getElementById('body-p').innerHTML = ps.map(i => {
                 const sub = parseFloat(i.preco) * parseInt(i.quantidade);
                 totalVal += sub;
-
-                // Lógica de Alerta: menos de 5 unidades
                 const isBaixo = i.quantidade < 5;
-                if (isBaixo) baixos.push(i.nome);
-
                 return `<tr>
-                    <td><img src="${i.imagem || ''}" class="thumb" onerror="this.src='https://via.placeholder.com/50'" onclick="abrirZoom(this.src)"></td>
+<td><img src="${i.imagem ? '/proxy/' + i.imagem.split('public/')[1] : ''}" class="thumb" onerror="this.src='https://via.placeholder.com/50'" onclick="abrirZoom(this.src)" loading="lazy"></td>
                     <td>${i.nome}</td>
                     <td>R$ ${parseFloat(i.preco).toFixed(2)}</td>
                     <td class="${isBaixo ? 'estoque-baixo' : ''}">${i.quantidade} ${isBaixo ? '⚠️' : ''}</td>
                     <td>R$ ${sub.toFixed(2)}</td>
                     <td>
-    <button class="btn-ed" onclick="prepararP(${i.id},'${i.nome}',${i.preco},${i.quantidade},${i.fornecedor_id})">Ed</button>
-    <button style="background:#ff9800; padding:6px 10px;" onclick="saidaEstoque(${i.id}, '${i.nome}', ${i.quantidade})">Saída</button>
-    <button class="btn-del" onclick="remover('produtos',${i.id})">X</button>
-</td>
-                    </tr>`;
+                        <button class="btn-ed" onclick="prepararP(${i.id},'${i.nome}',${i.preco},${i.quantidade},${i.fornecedor_id || 0},'${i.imagem || ''}'
+                    )">Ed</button>
+                        <button style="background:#ff9800;padding:6px 10px;" onclick="saidaEstoque(${i.id},'${i.nome}',${i.quantidade})">Saída</button>
+                        <button class="btn-del" onclick="remover('produtos',${i.id})">X</button>
+                    </td>
+                </tr>`;
             }).join('');
-
-
             document.getElementById('valTotal').innerText = `R$ ${totalVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
 
             // Histórico
@@ -347,54 +345,24 @@
             const contato = document.getElementById('fe').value;
             const telefone = document.getElementById('ft').value;
 
-            // 1. Validação de campos básicos
-            if (!nome || !cnpj) {
-                return alert("⚠️ Por favor, preencha pelo menos Nome e CNPJ.");
-            }
+            if (!nome || !cnpj) return alert("⚠️ Preencha Nome e CNPJ");
 
-            // 2. Verificação de CNPJ duplicado (apenas para novos cadastros)
-            if (!idF) { // Se não tem idF, é um novo cadastro
-                const fornecedoresExistentes = await fetch('/fornecedores').then(r => r.json());
-                function limparCNPJ(c) {
-                    return c.replace(/\D/g, '');
-                }
-
-                const cnpjLimpo = limparCNPJ(cnpj);
-
-                const jaExiste = fornecedoresExistentes.some(f => {
-                    return limparCNPJ(f.cnpj) === cnpjLimpo && f.id !== idF;
-                });
-
-                if (jaExiste) {
-                    return alert("❌ CNPJ já cadastrado!\n\nVerifique se este fornecedor já existe no sistema.");
-                }
-            }
-
-            // 3. Preparação e envio
             const d = { nome, cnpj, contato, telefone };
             const url = idF ? `/fornecedores/${idF}` : '/fornecedores';
-            const metodo = idF ? 'PUT' : 'POST';
-
             const res = await fetch(url, {
-                method: metodo,
+                method: idF ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(d)
             });
 
             if (res.ok) {
-                // 4. Mensagens de sucesso específicas
-                if (idF) {
-                    alert("✅ Fornecedor atualizado com sucesso!");
-                } else {
-                    alert("✅ Fornecedor cadastrado com sucesso!");
-                }
-
-                // Limpeza e Recarregamento
+                alert(idF ? "✅ Atualizado!" : "✅ Cadastrado!");
                 idF = null;
                 ['fn', 'fc', 'fe', 'ft'].forEach(id => document.getElementById(id).value = '');
                 carregar();
             } else {
-                alert("❌ Erro ao salvar fornecedor no servidor.");
+                const erro = await res.json();
+                alert("❌ " + (erro.erro || "Erro servidor"));
             }
         }
 
@@ -404,106 +372,83 @@
             const qtd = document.getElementById('pq').value;
             const fid = document.getElementById('pf').value;
 
-            // 🔴 VALIDAÇÃO IMPORTANTE
-            if (!nome || !preco || !qtd || !fid) {
-                return alert("⚠️ Preencha todos os campos, incluindo o fornecedor!");
-            }
+            if (!nome || !preco || !qtd || !fid) return alert("⚠️ Todos os campos!");
 
             let res;
-
-            if (idP) {
-                res = await fetch(`/produtos/${idP}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        nome,
-                        preco,
-                        quantidade: qtd,
-                        fornecedor_id: fid
-                    })
-                });
-            } else {
-                const fd = new FormData();
-                fd.append('nome', nome);
-                fd.append('preco', preco);
-                fd.append('quantidade', qtd);
-                fd.append('fornecedor_id', fid);
-
-                if (document.getElementById('pi').files[0]) {
-                    fd.append('foto', document.getElementById('pi').files[0]);
-                }
-
-                res = await fetch('/produtos', {
-                    method: 'POST',
-                    body: fd
-                });
-            }
+            const imagem = document.getElementById('pi').value.trim();
+            const data = { nome, preco, quantidade: qtd, fornecedor_id: fid, imagem };
+            res = await fetch(idP ? `/produtos/${idP}` : '/produtos', {
+                method: idP ? 'PUT' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
 
             if (res.ok) {
-                alert(idP ? "✅ Produto atualizado!" : "✅ Produto cadastrado!");
+                alert(idP ? "✅ Atualizado!" : "✅ Cadastrado!");
                 idP = null;
-
                 ['pn', 'pp', 'pq', 'pi'].forEach(id => document.getElementById(id).value = '');
-                document.getElementById('pf').value = ""; // limpa fornecedor também
-
+                document.getElementById('pf').value = '';
                 carregar();
             } else {
                 const erro = await res.json();
-                alert("❌ " + (erro.erro || "Erro ao salvar produto"));
+                alert("❌ " + (erro.erro || "Erro"));
             }
         }
 
-        function prepararF(id, n, c, e, t) { idF = id; document.getElementById('fn').value = n; document.getElementById('fc').value = c; document.getElementById('fe').value = e; document.getElementById('ft').value = t; }
-        function prepararP(id, n, p, q, f) { idP = id; document.getElementById('pn').value = n; document.getElementById('pp').value = p; document.getElementById('pq').value = q; document.getElementById('pf').value = f; }
-        async function remover(rota, id) { if (confirm("Excluir permanentemente?")) { await fetch(`/${rota}/${id}`, { method: 'DELETE' }); carregar(); } }
-        async function executarLimpeza() {
-            const tipo = document.getElementById('tempo-limpeza').value;
-            if (confirm(tipo === 'tudo' ? "ZERAR histórico?" : "Limpar registros antigos?")) {
-                await fetch(`/historico?dias=${tipo}`, { method: 'DELETE' }); carregar();
+        function prepararF(id, n, c, e, t) { idF = id;['fn', 'fc', 'fe', 'ft'].forEach((el, i) => document.getElementById(el).value = [n, c, e, t][i]); }
+        function prepararP(id, n, p, q, f, img) { idP = id; document.getElementById('pn').value = n; document.getElementById('pp').value = p; document.getElementById('pq').value = q; document.getElementById('pf').value = f; document.getElementById('pi').value = img || ''; }
+        async function remover(rota, id) {
+            if (confirm("Excluir?")) {
+                try {
+                    const res = await fetch(`/${rota}/${id}`, { method: 'DELETE' });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    carregar();
+                } catch (err) {
+                    alert(`❌ Erro ao excluir: ${err.message}`);
+                }
             }
         }
-        function abrirZoom(src) { document.getElementById('img-zoom').src = src; document.getElementById('zoom-modal').style.display = 'flex'; }
+        async function executarLimpeza() {
+            const tipo = document.getElementById('tempo-limpeza').value;
+            if (confirm("Limpar histórico?")) await fetch(`/historico?dias=${tipo}`, { method: 'DELETE' }); carregar();
+        }
+        function abrirZoom(src) {
+            if (src && src.includes('supabase')) {
+                src = '/proxy/' + src.split('public/')[1];
+            }
+            document.getElementById('img-zoom').src = src || '';
+            document.getElementById('zoom-modal').style.display = 'flex';
+        }
         function exportarExcel(id, nome) { XLSX.writeFile(XLSX.utils.table_to_book(document.getElementById(id)), `${nome}.xlsx`); }
         function fazerBackup() { window.location.href = '/backup'; }
         function sair() { location.reload(); }
         function buscar(id, t) { document.querySelectorAll(`#${id} tr`).forEach(tr => tr.style.display = tr.innerText.toLowerCase().includes(t.toLowerCase()) ? '' : 'none'); }
 
+        // ✅ BOTÃO SAÍDA CORRIGIDO
         async function saidaEstoque(id, nome, estoqueAtual) {
-            const qtd = prompt(`Saída de estoque para "${nome}"\n\nEstoque atual: ${estoqueAtual}\nDigite a quantidade de saída:`);
+            const qtdStr = prompt(`📦 Saída para "${nome}"\n\nEstoque atual: ${estoqueAtual}\n\nQuantidade:`);
+            if (!qtdStr) return;
 
-            if (!qtd) return;
+            const quantidadeSaida = parseInt(qtdStr);
+            if (isNaN(quantidadeSaida) || quantidadeSaida <= 0) return alert('❌ Quantidade inválida!');
+            if (quantidadeSaida > estoqueAtual) return alert('❌ Estoque insuficiente!');
 
-            const quantidadeSaida = parseInt(qtd);
-
-            if (isNaN(quantidadeSaida) || quantidadeSaida <= 0) {
-                return alert("❌ Quantidade inválida!");
-            }
-
-            if (quantidadeSaida > estoqueAtual) {
-                return alert("❌ Estoque insuficiente!");
-            }
-
-            const novaQtd = estoqueAtual - quantidadeSaida;
-
-            const res = await fetch(`/produtos/${id}`, {
-                method: 'PUT',
+            const res = await fetch(`/produtos/${id}/saida`, {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    nome: nome,
-                    preco: 0, // ajuste se quiser manter o preço
-                    quantidade: novaQtd,
-                    fornecedor_id: null
-                })
+                body: JSON.stringify({ quantidadeSaida })
             });
 
             if (res.ok) {
-                alert("✅ Saída registrada!");
+                alert(`✅ Saída OK!\n${quantidadeSaida}un → Estoque: ${estoqueAtual - quantidadeSaida}`);
                 carregar();
             } else {
-                alert("❌ Erro ao registrar saída.");
+                const erro = await res.json();
+                alert('❌ ' + (erro.erro || 'Erro'));
             }
+
         }
     </script>
 </body>
 
-</html>
+</html

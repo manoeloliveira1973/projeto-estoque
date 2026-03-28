@@ -1,10 +1,10 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const multer = require('multer');
+const fetch = require('node-fetch');
 const path = require('path');
 const fs = require('fs');
-const { Pool } = require('pg'); // Usando apenas Postgres agora
+const { Pool } = require('pg');
 
 const app = express();
 app.use(express.json());
@@ -14,22 +14,23 @@ app.use(cors());
 const PORT = process.env.PORT || 3000;
 
 app.use(express.static(__dirname));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-if (!fs.existsSync('./uploads')) fs.mkdirSync('./uploads');
-
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, 'uploads/'),
-    filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
+// CORS específico para imagens
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.path.startsWith('/proxy')) {
+        res.header('Content-Type', 'image/*');
+        res.header('Cache-Control', 'public, max-age=3600');
+    }
+    next();
 });
-const upload = multer({ storage });
 
 // CONFIGURAÇÃO SUPABASE
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false // ADICIONE ESTA LINHA
-    }
+    ssl: process.env.NODE_ENV !== 'production' ? { rejectUnauthorized: false } : true
 });
 
 // Inicialização do Banco no Supabase
@@ -88,39 +89,50 @@ app.delete('/fornecedores/:id', async (req, res) => {
     res.json({ ok: true });
 });
 
+app.delete('/produtos/:id', async (req, res) => {
+    await pool.query('DELETE FROM produtos WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+});
+
 app.get('/produtos', async (req, res) => {
     const result = await pool.query('SELECT * FROM produtos');
     res.json(result.rows);
 });
 
-app.post('/produtos', upload.single('foto'), async (req, res) => {
+app.post('/produtos', async (req, res) => {
     try {
-        let { nome, preco, quantidade, fornecedor_id } = req.body;
+        let { nome, preco, quantidade, fornecedor_id, imagem } = req.body;
         nome = nome.trim().toLowerCase();
         const nP = parseFloat(preco.toString().replace(',', '.'));
         const nQ = parseInt(quantidade);
-        const foto = req.file ? `/uploads/${req.file.filename}` : null;
 
-        const ex = await pool.query('SELECT * FROM produtos WHERE nome = $1 AND fornecedor_id = $2', [nome, fornecedor_id]);
+        const ex = await pool.query('SELECT * FROM produtos WHERE LOWER(nome) = LOWER($1) AND fornecedor_id = $2', [nome, fornecedor_id]);
 
         if (ex.rows.length > 0) {
             const produto = ex.rows[0];
             const novaQ = produto.quantidade + nQ;
             const novoP = ((produto.preco * produto.quantidade) + (nP * nQ)) / novaQ;
-            await pool.query('UPDATE produtos SET preco=$1, quantidade=$2, imagem=COALESCE($3, imagem) WHERE id=$4', [novoP, novaQ, foto, produto.id]);
+            await pool.query('UPDATE produtos SET preco=$1, quantidade=$2, imagem=COALESCE($3, imagem) WHERE id=$4', [novoP, novaQ, imagem, produto.id]);
         } else {
-            await pool.query('INSERT INTO produtos (nome, preco, quantidade, fornecedor_id, imagem) VALUES ($1, $2, $3, $4, $5)', [nome, nP, nQ, fornecedor_id, foto]);
+            await pool.query('INSERT INTO produtos (nome, preco, quantidade, fornecedor_id, imagem) VALUES ($1, $2, $3, $4, $5)', [nome, nP, nQ, fornecedor_id, imagem]);
         }
         await pool.query('INSERT INTO historico (produto_nome, tipo, quantidade) VALUES ($1, $2, $3)', [nome, "ENTRADA", nQ]);
         res.json({ ok: true });
-    } catch (err) { res.status(500).json({ erro: "Erro ao salvar" }); }
+    } catch (err) {
+        console.error('Erro produtos POST:', err);
+        res.status(500).json({ erro: 'Erro ao salvar: ' + err.message });
+    }
 });
 
 app.put('/produtos/:id', async (req, res) => {
-    const { nome, preco, quantidade } = req.body;
-    const nP = parseFloat(preco.toString().replace(',', '.'));
-    await pool.query('UPDATE produtos SET nome=$1, preco=$2, quantidade=$3 WHERE id=$4', [nome, nP, quantidade, req.params.id]);
-    res.json({ ok: true });
+    try {
+        const { nome, preco, quantidade, imagem } = req.body;
+        const nP = parseFloat(preco.toString().replace(',', '.'));
+        await pool.query('UPDATE produtos SET nome=$1, preco=$2, quantidade=$3, imagem=$4 WHERE id=$5', [nome, nP, quantidade, imagem, req.params.id]);
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(400).json({ erro: 'Erro ao atualizar: ' + err.message });
+    }
 });
 
 app.get('/historico', async (req, res) => {
@@ -130,14 +142,63 @@ app.get('/historico', async (req, res) => {
 
 app.delete('/historico', async (req, res) => {
     const { dias } = req.query;
-    if (dias === 'tudo') await pool.query('DELETE FROM historico');
-    else await pool.query("DELETE FROM historico WHERE data_hora < NOW() - INTERVAL '$1 days'", [dias]);
-    res.json({ ok: true });
+    try {
+        if (dias === 'tudo') {
+            await pool.query('DELETE FROM historico');
+        } else {
+            const interval = parseInt(dias);
+            await pool.query('DELETE FROM historico WHERE data_hora < NOW() - INTERVAL $1 day', [interval]);
+        }
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(400).json({ erro: 'Erro na limpeza: ' + err.message });
+    }
 });
 
-// No Render, o backup de arquivo .db não existe mais (pois o banco é nuvem)
+app.post('/produtos/:id/saida', async (req, res) => {
+    try {
+        const { quantidadeSaida } = req.body;
+        const qS = parseInt(quantidadeSaida);
+
+        const produto = await pool.query('SELECT nome, quantidade FROM produtos WHERE id = $1', [req.params.id]);
+        if (produto.rows.length === 0) return res.status(404).json({ erro: 'Produto não encontrado' });
+
+        const p = produto.rows[0];
+        if (p.quantidade < qS) return res.status(400).json({ erro: 'Estoque insuficiente' });
+
+        const novaQtd = p.quantidade - qS;
+        await pool.query('UPDATE produtos SET quantidade = $1 WHERE id = $2', [novaQtd, req.params.id]);
+        await pool.query('INSERT INTO historico (produto_nome, tipo, quantidade) VALUES ($1, $2, $3)', [p.nome, 'SAÍDA', qS]);
+
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(500).json({ erro: err.message });
+    }
+});
+
+// Proxy para imagens Supabase Storage
+app.get('/proxy/:path(*)', async (req, res) => {
+    try {
+        const imgUrl = `https://uthfogriscagsibnrmda.supabase.co/storage/v1/object/public/${req.params.path}`;
+        console.log(`📸 Proxy: ${imgUrl}`);
+        const response = await fetch(imgUrl);
+        if (!response.ok) {
+            console.log(`❌ Proxy fail: ${response.status}`);
+            return res.status(404).send('Imagem não encontrada');
+        }
+        const buffer = await response.buffer();
+        res.set('Content-Type', response.headers.get('content-type') || 'image/webp');
+        res.set('Cache-Control', 'public, max-age=3600');
+        res.send(buffer);
+    } catch (err) {
+        console.error('Proxy error:', err);
+        res.status(500).send('Erro proxy imagem');
+    }
+});
+
+// Backup info
 app.get('/backup', (req, res) => {
-    res.status(400).send("O banco agora está seguro no Supabase! Use o painel da Supabase para exportar dados.");
+    res.status(200).json({ message: 'Use painel Supabase para exportar dados.' });
 });
 
 app.listen(PORT, () => { console.log(`🚀 Servidor Online na porta ${PORT}`); });
