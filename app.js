@@ -30,8 +30,11 @@ app.use((req, res, next) => {
 // CONFIGURAÇÃO SUPABASE
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV !== 'production' ? { rejectUnauthorized: false } : true
+    ssl: {
+        rejectUnauthorized: false
+    }
 });
+
 
 // Inicialização do Banco no Supabase
 (async () => {
